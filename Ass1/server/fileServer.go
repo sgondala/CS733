@@ -3,7 +3,10 @@ package main
 import "net"
 import "fmt"
 import "bufio"
-import _ "strings" // only needed below for sample processing
+
+// import "io"
+
+// import "strings" // only needed below for sample processing
 
 func main() {
 	fmt.Println("Launching server...") // listen on all interfaces
@@ -16,7 +19,11 @@ func main() {
 
 func singleConnection(conn net.Conn) {
 	for {
-		readMessage, _ := bufio.NewReader(conn).ReadString('\n')
+		readMessage, err := bufio.NewReader(conn).ReadString(byte('\n')) // Line is showed as
+		if err != nil {
+			break
+		}
 		fmt.Print("Message is ", string(readMessage))
 	}
+	conn.Close()
 }
