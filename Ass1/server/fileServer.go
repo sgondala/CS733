@@ -4,10 +4,11 @@ import "net"
 import "fmt"
 import "bufio"
 import "io/ioutil"
+import "strconv"
+import "os"
+import "strings" // only needed below for sample processing
 
-// import "io"
-
-// import "strings" // only needed below for sample processing
+var filesTillNow int64 = 0
 
 func main() {
 	fmt.Println("Launching server...") // listen on all interfaces
@@ -24,25 +25,51 @@ func singleConnection(conn net.Conn) {
 		if err != nil {
 			break
 		}
-		if len(readMessage) >= 4 && readMessage[0:4] == "read" {
-			go readFunction(&conn, readMessage)
+		words := strings.Split(readMessage, " ")
+
+		if words[0] == "write" {
+			fileName := words[1]
+			numBytes, _ := strconv.Atoi(words[2])
+			contentBytes, _ := bufio.NewReader(conn).ReadString(byte('\n')) //TODO - Assuming that next line always exists
+			contentBytes = contentBytes[0 : len(contentBytes)-2]
+			go writeFunction(conn, fileName, numBytes, contentBytes)
+
+		} else if words[0] == "delete" {
+			fileName := words[1]
+			go deleteFunction(conn, fileName[:len(fileName)-2])
 		}
-		fmt.Print("Message is ", string(readMessage))
-		// conn.Write([]byte("Able to write \n"))
+
+		if len(readMessage) >= 4 && readMessage[0:4] == "read" {
+			go readFunction(conn, readMessage)
+		}
 	}
 	conn.Close()
 }
 
-func readFunction(conn *net.Conn, readMessage string) {
+func deleteFunction(conn net.Conn, fileName string) {
+	err := os.Remove(fileName)
+	if err == nil {
+		conn.Write([]byte("OK\r\n"))
+	} else {
+		conn.Write([]byte("Error in deletion \n")) // TODO Should check if this is the error
+	}
+}
+
+func writeFunction(conn net.Conn, fileName string, numBytes int, contentBytes string) {
+	conn.Write([]byte("OK " + strconv.FormatInt(filesTillNow, 10) + "\r\n"))
+	filesTillNow++ //TODO - Should use concurrency stuff
+}
+
+func readFunction(conn net.Conn, readMessage string) {
 	fmt.Println("In Read \n")
 	fileName := readMessage[5 : len(readMessage)-2]
 	content, err := ioutil.ReadFile("./" + fileName)
 	fmt.Println("./" + fileName)
 	if err == nil {
-		(*conn).Write(content)
+		conn.Write(content)
 		// fmt.Print(string(content))
 	} else {
-		(*conn).Write([]byte("File not found \n"))
+		conn.Write([]byte("File not found \n"))
 		// fmt.Println("File not found")
 	}
 }
