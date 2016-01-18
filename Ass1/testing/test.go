@@ -1,21 +1,22 @@
 package main
 
-import (
-	"fmt"
-	"net"
-)
+import "fmt"
+import "net"
+import _ "strings"
+import "io/ioutil"
 
 func main() {
-	l, _ := net.Listen("tcp", "localhost:8080")
-	for {
-		conn, _ := l.Accept()
-		go handleRequest(conn)
+	fileName := "a"
+	content, err := ioutil.ReadFile("./" + fileName)
+	if err == nil {
+		fmt.Print(string(content))
+	} else {
+		fmt.Println("File not found")
 	}
+	// fmt.Println(len(content))
 }
 
 // Handles incoming requests.
 func handleRequest(conn net.Conn) {
-	buf := make([]byte, 1024)
-	message, _ := conn.Read(buf)
-	fmt.Print("Message is ", string(message), "\n")
+
 }

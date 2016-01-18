@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "bufio"
 	"fmt"
 	"net"
 	_ "time"
@@ -12,9 +13,14 @@ func main() {
 	if err != nil {
 		fmt.Println("Server not up")
 	}
-	conn.Write([]byte("Hello\r\n"))
-	// content := []byte("test\r\n")
-	// time.Sleep(1 * time.Second)
-	// conn.Write([]byte("write test 4 4\r\n"))
-	// conn.Write(content)
+	conn.Write([]byte("read a\r\n"))
+	conn.Write([]byte("read b\r\n"))
+	// for {
+	// 	readMessage, err := bufio.NewReader(conn).ReadString(byte('\n')) // Line is showed as
+	// 	if err != nil {
+	// 		break
+	// 	}
+	// 	fmt.Println(string(readMessage))
+	// 	// conn.Write([]byte("Able to write \n"))
+	// }
 }
