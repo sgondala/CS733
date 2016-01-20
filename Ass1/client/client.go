@@ -13,14 +13,6 @@ func main() {
 	if err != nil {
 		fmt.Println("Server not up")
 	}
-	conn.Write([]byte("read a\r\n"))
-	conn.Write([]byte("read b\r\n"))
-	// for {
-	// 	readMessage, err := bufio.NewReader(conn).ReadString(byte('\n')) // Line is showed as
-	// 	if err != nil {
-	// 		break
-	// 	}
-	// 	fmt.Println(string(readMessage))
-	// 	// conn.Write([]byte("Able to write \n"))
-	// }
+	conn.Write([]byte("write a 10\r\n"))
+	conn.Write([]byte("1234567890\r\n"))
 }

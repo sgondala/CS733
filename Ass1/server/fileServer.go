@@ -7,6 +7,7 @@ import "io/ioutil"
 import "strconv"
 import "os"
 import "strings" // only needed below for sample processing
+// import "io"
 
 var filesTillNow int64 = 0
 
@@ -20,8 +21,9 @@ func main() {
 }
 
 func singleConnection(conn net.Conn) {
+	reader := bufio.NewReader(conn)
 	for {
-		readMessage, err := bufio.NewReader(conn).ReadString(byte('\n')) // Line is showed as
+		readMessage, err := reader.ReadString(byte('\n')) // Line is showed as
 		if err != nil {
 			break
 		}
@@ -29,10 +31,17 @@ func singleConnection(conn net.Conn) {
 
 		if words[0] == "write" {
 			fileName := words[1]
-			numBytes, _ := strconv.Atoi(words[2])
-			contentBytes, _ := bufio.NewReader(conn).ReadString(byte('\n')) //TODO - Assuming that next line always exists
-			contentBytes = contentBytes[0 : len(contentBytes)-2]
-			go writeFunction(conn, fileName, numBytes, contentBytes)
+			numBytes, _ := strconv.Atoi(words[2][:len(words[2])-2])
+			contentBytes := make([]byte, numBytes+2)
+			for i := 0; i < numBytes+2; i++ {
+				contentBytes[i], _ = reader.ReadByte()
+			}
+			contentBytes = contentBytes[:len(contentBytes)-2]
+			fmt.Println(fileName)
+			fmt.Println(numBytes)
+			fmt.Println(len(contentBytes))
+			fmt.Println(string(contentBytes))
+			go writeFunction(conn, fileName, numBytes, string(contentBytes))
 
 		} else if words[0] == "delete" {
 			fileName := words[1]
@@ -61,15 +70,12 @@ func writeFunction(conn net.Conn, fileName string, numBytes int, contentBytes st
 }
 
 func readFunction(conn net.Conn, readMessage string) {
-	fmt.Println("In Read \n")
 	fileName := readMessage[5 : len(readMessage)-2]
 	content, err := ioutil.ReadFile("./" + fileName)
 	fmt.Println("./" + fileName)
 	if err == nil {
 		conn.Write(content)
-		// fmt.Print(string(content))
 	} else {
 		conn.Write([]byte("File not found \n"))
-		// fmt.Println("File not found")
 	}
 }
