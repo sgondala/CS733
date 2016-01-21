@@ -13,6 +13,6 @@ func main() {
 	if err != nil {
 		fmt.Println("Server not up")
 	}
-	conn.Write([]byte("write a 10\r\n"))
-	conn.Write([]byte("1234567890\r\n"))
+	conn.Write([]byte("write a 10\r\n1234\r\n7890\r\n"))
+	// conn.Write([]byte(""))
 }
