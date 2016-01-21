@@ -8,13 +8,14 @@ import "strconv"
 import "os"
 import "strings"
 import "sync"
+import "time"
 
 var fileVersionNext int64 = 1
 var fileVersionMap map[string]int64 = map[string]int64{}
 var mutexLock = &sync.Mutex{}
 
 /*
-	TODO :- Correct error codes, Tests, enable support for expiry
+	TODO :- Correct error codes, Read output format, Tests, enable support for expiry
 */
 
 func main() {
@@ -42,13 +43,21 @@ func singleConnection(conn net.Conn) {
 
 		if words[0] == "write" {
 			fileName := words[1]
-			numBytes, _ := strconv.Atoi(words[2][:len(words[2])-2])
+			var numBytes int
+			var expTime float64
+			if len(words) == 3 {
+				numBytes, _ = strconv.Atoi(words[2][:len(words[2])-2])
+				expTime = -1
+			} else {
+				numBytes, _ = strconv.Atoi(words[2])
+				expTime, _ = strconv.ParseFloat(words[3][:len(words[3])-2], 64)
+			}
 			contentBytes := make([]byte, numBytes+2)
 			for i := 0; i < numBytes+2; i++ {
 				contentBytes[i], _ = reader.ReadByte()
 			}
 			contentBytes = contentBytes[:len(contentBytes)-2]
-			go writeFunction(conn, fileName, numBytes, contentBytes)
+			go writeFunction(conn, fileName, numBytes, contentBytes, expTime)
 
 		} else if words[0] == "delete" {
 			fileName := words[1]
@@ -84,7 +93,7 @@ func deleteFunction(conn net.Conn, fileName string) {
 	mutexLock.Unlock()
 }
 
-func writeFunction(conn net.Conn, fileName string, numBytes int, contentBytes []byte) {
+func writeFunction(conn net.Conn, fileName string, numBytes int, contentBytes []byte, expTime float64) {
 	mutexLock.Lock()
 	if !Exists(fileName) {
 		fmt.Println("Createad file")
@@ -92,8 +101,25 @@ func writeFunction(conn net.Conn, fileName string, numBytes int, contentBytes []
 	}
 	ioutil.WriteFile(fileName, contentBytes, 0644)
 	conn.Write([]byte("OK " + strconv.FormatInt(fileVersionNext, 10) + "\r\n"))
-	fileVersionMap[fileName] = fileVersionNext
 	fileVersionNext++
+	fileVersionMap[fileName] = fileVersionNext
+	if expTime != -1 {
+		go deleteFileVersion(fileName, fileVersionNext, expTime)
+	}
+	mutexLock.Unlock()
+}
+
+func deleteFileVersion(fileName string, fileVersion int64, expTime float64) {
+	time.Sleep(time.Duration(expTime) * time.Second)
+	mutexLock.Lock()
+	if fileVersionMap[fileName] == fileVersion {
+		err := os.Remove(fileName)
+		if err == nil {
+			delete(fileVersionMap, fileName)
+		}
+	} else {
+		// fmt.Println("Couldn't delete, file changed")
+	}
 	mutexLock.Unlock()
 }
 
@@ -101,7 +127,6 @@ func readFunction(conn net.Conn, readMessage string) {
 	mutexLock.Lock()
 	fileName := readMessage[5 : len(readMessage)-2]
 	content, err := ioutil.ReadFile("./" + fileName)
-	fmt.Println("./" + fileName)
 	if err == nil {
 		conn.Write(content)
 	} else {
