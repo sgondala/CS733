@@ -1,7 +1,8 @@
 package main
 
 import "net"
-import "fmt"
+
+// import "fmt"
 import "bufio"
 import "io/ioutil"
 import "strconv"
@@ -13,17 +14,14 @@ import "time"
 var fileVersionNext int64 = 1
 var fileVersionMap map[string]int64 = map[string]int64{}
 var mutexLock = &sync.Mutex{}
-
-/*
-	TODO :- Correct error codes, Read output format, Tests, enable support for expiry
-*/
+var fileExpTimeMap map[string]float64 = map[string]float64{}
 
 func main() {
 	serverMain()
 }
 
 func serverMain() {
-	fmt.Println("Launching server...") // listen on all interfaces
+
 	ln, _ := net.Listen("tcp", "localhost:8080")
 	for {
 		conn, _ := ln.Accept()
@@ -82,8 +80,13 @@ func singleConnection(conn net.Conn) {
 			contentBytes = contentBytes[:len(contentBytes)-2]
 			go casFunction(conn, fileName, version, numBytes, contentBytes, expTime)
 
-		} else if len(readMessage) >= 4 && readMessage[0:4] == "read" {
-			go readFunction(conn, readMessage)
+		} else if words[0] == "read" {
+			fileName := words[1]
+			go readFunction(conn, fileName[:len(fileName)-2])
+
+		} else {
+			conn.Write([]byte("ERR_CMD_ERR\r\n"))
+			// break
 		}
 	}
 	conn.Close()
@@ -91,12 +94,17 @@ func singleConnection(conn net.Conn) {
 
 func deleteFunction(conn net.Conn, fileName string) {
 	mutexLock.Lock()
-	err := os.Remove(fileName)
-	if err == nil {
-		delete(fileVersionMap, fileName)
-		conn.Write([]byte("OK\r\n"))
+	if !Exists(fileName) {
+		conn.Write([]byte("ERR_FILE_NOT_FOUND\r\n"))
 	} else {
-		conn.Write([]byte("Error in deletion \n"))
+		err := os.Remove(fileName)
+		if err == nil {
+			delete(fileVersionMap, fileName)
+			delete(fileExpTimeMap, fileName)
+			conn.Write([]byte("OK\r\n"))
+		} else {
+			conn.Write([]byte("ERR_INTERNAL\r\n"))
+		}
 	}
 	mutexLock.Unlock()
 }
@@ -104,14 +112,16 @@ func deleteFunction(conn net.Conn, fileName string) {
 func writeFunction(conn net.Conn, fileName string, numBytes int, contentBytes []byte, expTime float64) {
 	mutexLock.Lock()
 	if !Exists(fileName) {
-		fmt.Println("Createad file")
 		os.Create(fileName)
 	}
 	ioutil.WriteFile(fileName, contentBytes, 0644)
-	conn.Write([]byte("OK " + strconv.FormatInt(fileVersionNext, 10) + "\r\n"))
 	fileVersionNext++
+	conn.Write([]byte("OK " + strconv.FormatInt(fileVersionNext, 10) + "\r\n"))
 	fileVersionMap[fileName] = fileVersionNext
+	fileExpTimeMap[fileName] = 0
 	if expTime != -1 {
+		i := timeInSecsNow()
+		fileExpTimeMap[fileName] = float64(i) + expTime
 		go deleteFileVersion(fileName, fileVersionNext, expTime)
 	}
 	mutexLock.Unlock()
@@ -124,6 +134,7 @@ func deleteFileVersion(fileName string, fileVersion int64, expTime float64) {
 		err := os.Remove(fileName)
 		if err == nil {
 			delete(fileVersionMap, fileName)
+			delete(fileExpTimeMap, fileName)
 		}
 	} else {
 		// fmt.Println("Couldn't delete, file changed")
@@ -131,14 +142,30 @@ func deleteFileVersion(fileName string, fileVersion int64, expTime float64) {
 	mutexLock.Unlock()
 }
 
-func readFunction(conn net.Conn, readMessage string) {
+func readFunction(conn net.Conn, fileName string) {
 	mutexLock.Lock()
-	fileName := readMessage[5 : len(readMessage)-2]
-	content, err := ioutil.ReadFile("./" + fileName)
-	if err == nil {
-		conn.Write(content)
+	if !Exists(fileName) {
+		conn.Write([]byte("ERR_FILE_NOT_FOUND\r\n"))
 	} else {
-		conn.Write([]byte("File not found \n"))
+		content, err := ioutil.ReadFile("./" + fileName)
+		if err == nil {
+			expTime := fileExpTimeMap[fileName]
+			var timeLeft float64
+			if expTime == 0 {
+				timeLeft = 0
+			} else {
+				timeLeft = expTime - timeInSecsNow()
+				if timeLeft < 0 {
+					timeLeft = 0
+				}
+			}
+			conn.Write([]byte("CONTENTS " + strconv.FormatInt(fileVersionMap[fileName], 10) +
+				" " + strconv.Itoa(len(content)) + " " + strconv.FormatFloat(timeLeft, 'f', -1, 64) + " " + "\r\n"))
+			conn.Write(content)
+			conn.Write([]byte("\r\n"))
+		} else {
+			conn.Write([]byte("ERR_INTERNAL\r\n"))
+		}
 	}
 	mutexLock.Unlock()
 }
@@ -147,17 +174,20 @@ func casFunction(conn net.Conn, fileName string, version int64,
 	numBytes int, contentBytes []byte, expTime float64) {
 	mutexLock.Lock()
 	if !Exists(fileName) {
-		conn.Write([]byte("File not found \n"))
+		conn.Write([]byte("ERR_FILE_NOT_FOUND\r\n"))
 	} else if fileVersionMap[fileName] == version {
 		ioutil.WriteFile(fileName, contentBytes, 0644)
-		conn.Write([]byte("OK " + strconv.FormatInt(fileVersionNext, 10) + "\r\n"))
 		fileVersionNext++
+		conn.Write([]byte("OK " + strconv.FormatInt(fileVersionNext, 10) + "\r\n"))
 		fileVersionMap[fileName] = fileVersionNext
+		fileExpTimeMap[fileName] = 0
 		if expTime != -1 {
+			fileExpTimeMap[fileName] = timeInSecsNow() + expTime
 			go deleteFileVersion(fileName, fileVersionNext, expTime)
 		}
 	} else {
-		conn.Write([]byte("File version mismatch \n"))
+		currentVersion := fileVersionMap[fileName]
+		conn.Write([]byte("ERR_VERSION " + strconv.FormatInt(currentVersion, 10) + "\r\n"))
 	}
 	mutexLock.Unlock()
 }
@@ -169,4 +199,8 @@ func Exists(name string) bool {
 		}
 	}
 	return true
+}
+
+func timeInSecsNow() float64 {
+	return float64(time.Now().Unix())
 }

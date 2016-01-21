@@ -5,15 +5,17 @@ import "net"
 
 // import "strings"
 import _ "io/ioutil"
+import "time"
 
 var isWrite bool = false
 
 func main() {
-	fmt.Println(0)
-	go tempFunction()
-	fmt.Println(1)
-	tempFunction()
-	fmt.Println(2)
+	now := time.Now()
+	secs := now.Unix()
+
+	fmt.Println(secs)
+	i := 1
+	fmt.Println(float64(i))
 	// fmt.Println(isWrite)
 	// fileName := "a"
 	// content, err := ioutil.ReadFile("./" + fileName)
