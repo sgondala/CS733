@@ -6,6 +6,6 @@ For more details, look at the pdf provided. <br>
 
 References - 
 <li>
-<ol> https://systembash.com/a-simple-go-tcp-server-and-tcp-client/ </ol>
-<ol> http://stackoverflow.com/a/12527546 </ol>
+<ul> TCP Connections - https://systembash.com/a-simple-go-tcp-server-and-tcp-client/ </ul>
+<ul> File existing in a directory - http://stackoverflow.com/a/12527546 </ul>
 </li>
