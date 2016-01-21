@@ -66,13 +66,21 @@ func singleConnection(conn net.Conn) {
 		} else if words[0] == "cas" {
 			fileName := words[1]
 			version, _ := strconv.ParseInt(words[2], 10, 64)
-			numBytes, _ := strconv.Atoi(words[3][:len(words[3])-2])
+			var numBytes int
+			var expTime float64
+			if len(words) == 4 {
+				numBytes, _ = strconv.Atoi(words[3][:len(words[3])-2])
+				expTime = -1
+			} else {
+				numBytes, _ = strconv.Atoi(words[3])
+				expTime, _ = strconv.ParseFloat(words[4][:len(words[4])-2], 64)
+			}
 			contentBytes := make([]byte, numBytes+2)
 			for i := 0; i < numBytes+2; i++ {
 				contentBytes[i], _ = reader.ReadByte()
 			}
 			contentBytes = contentBytes[:len(contentBytes)-2]
-			go casFunction(conn, fileName, version, numBytes, contentBytes)
+			go casFunction(conn, fileName, version, numBytes, contentBytes, expTime)
 
 		} else if len(readMessage) >= 4 && readMessage[0:4] == "read" {
 			go readFunction(conn, readMessage)
@@ -135,15 +143,19 @@ func readFunction(conn net.Conn, readMessage string) {
 	mutexLock.Unlock()
 }
 
-func casFunction(conn net.Conn, fileName string, version int64, numBytes int, contentBytes []byte) {
+func casFunction(conn net.Conn, fileName string, version int64,
+	numBytes int, contentBytes []byte, expTime float64) {
 	mutexLock.Lock()
 	if !Exists(fileName) {
 		conn.Write([]byte("File not found \n"))
 	} else if fileVersionMap[fileName] == version {
 		ioutil.WriteFile(fileName, contentBytes, 0644)
 		conn.Write([]byte("OK " + strconv.FormatInt(fileVersionNext, 10) + "\r\n"))
-		fileVersionMap[fileName] = fileVersionNext
 		fileVersionNext++
+		fileVersionMap[fileName] = fileVersionNext
+		if expTime != -1 {
+			go deleteFileVersion(fileName, fileVersionNext, expTime)
+		}
 	} else {
 		conn.Write([]byte("File version mismatch \n"))
 	}
